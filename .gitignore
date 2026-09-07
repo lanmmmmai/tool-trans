@@ -11,3 +11,6 @@ build/
 *.log
 backend/.venv/
 backend/*.egg-info/
+frontend/node_modules/
+frontend/.next/
+frontend/next-env.d.ts
