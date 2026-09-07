@@ -15,3 +15,4 @@ frontend/node_modules/
 frontend/.next/
 frontend/next-env.d.ts
 .claude/
+backend/tests/fixtures/*.mp4
