@@ -1,219 +1,149 @@
-# AI Video Translator & Dubbing — Design Spec
+# Phần mềm AI Dịch & Lồng tiếng Video — Bản đặc tả thiết kế
 
-Status: Approved by user (2026-09-07). Ready for implementation planning.
+Trạng thái: Đã được người dùng phê duyệt (2026-09-07). Sẵn sàng cho việc lập kế hoạch triển khai.
 
-## 1. Purpose & Scope
+## 1. Mục đích & Phạm vi
 
-A web application that takes a user-uploaded video (or a YouTube/TikTok URL),
-transcribes the spoken audio, translates it, generates dubbed speech in the
-target language, synchronizes the new audio with the original video timing,
-and produces a final video the user can preview and export — optionally with
-Vietnamese subtitles.
+Một ứng dụng web nhận video do người dùng tải lên (hoặc một URL YouTube/TikTok), phiên âm giọng nói, dịch nó, tạo giọng nói lồng tiếng bằng ngôn ngữ đích, đồng bộ hóa âm thanh mới với thời gian gốc của video, và tạo ra một video cuối cùng để người dùng xem trước và xuất ra — có thể kèm theo phụ đề tiếng Việt.
 
-Primary use case: the user translates and re-dubs their own YouTube/TikTok
-videos (source: EN/ZH/JA) into Vietnamese, to re-publish. The product is
-built for personal/internal use first, but the architecture (full auth,
-per-user quotas, admin role) is designed so it can grow into a public SaaS
-later without a rewrite.
+Trường hợp sử dụng chính: người dùng dịch và lồng tiếng lại các video YouTube/TikTok của chính họ (nguồn: EN/ZH/JA) sang tiếng Việt để đăng lại. Sản phẩm được xây dựng cho mục đích sử dụng cá nhân/nội bộ trước, nhưng kiến trúc (đầy đủ tính năng xác thực, hạn mức phút cho từng người dùng, vai trò quản trị viên) được thiết kế để sau này có thể phát triển thành một SaaS (Phần mềm dạng dịch vụ) công cộng mà không cần viết lại mã.
 
-## 2. Requirements Summary
+## 2. Tóm tắt yêu cầu
 
-### Users & Access
-- Full registration/login via Supabase Auth.
-- Roles: `user` and `admin`.
-- Admins can view all users and set a per-user monthly minutes quota.
+### Người dùng & Quyền truy cập
+- Đăng ký/đăng nhập đầy đủ qua Supabase Auth.
+- Vai trò: `user` (người dùng) và `admin` (quản trị viên).
+- Quản trị viên có thể xem tất cả người dùng và đặt hạn mức số phút hàng tháng cho mỗi người dùng.
 
-### Languages
-- Source languages actively targeted: English, Chinese, Japanese.
-- Target language actively targeted: Vietnamese.
-- The pipeline is architected language-agnostic (any → any); source/target
-  are per-project fields, not hardcoded.
-- UI language: Vietnamese only. No i18n framework needed at this stage.
+### Ngôn ngữ
+- Các ngôn ngữ nguồn tích cực hỗ trợ: Tiếng Anh, Tiếng Trung, Tiếng Nhật.
+- Ngôn ngữ đích tích cực hỗ trợ: Tiếng Việt.
+- Quy trình xử lý được thiết kế không phụ thuộc ngôn ngữ (bất kỳ → bất kỳ); ngôn ngữ nguồn/đích là các trường thông tin của mỗi dự án, không bị hardcode.
+- Ngôn ngữ giao diện (UI): Chỉ tiếng Việt. Không cần framework đa ngôn ngữ (i18n) ở giai đoạn này.
 
-### Video Input
-- Max duration: 60 minutes. Max file size: 2 GB.
-- Accepted formats: anything FFmpeg can read (MP4, MOV, MKV, AVI, WebM, FLV, …).
-- Input methods: direct file upload, or URL import from YouTube/TikTok via
-  `yt-dlp` (for videos the user owns/has rights to).
-- One video processed at a time per project; multiple projects can be queued
-  sequentially (no parallel processing requirement).
-- Output resolution: user-selectable per export. Default behavior is to copy
-  the original video stream (no re-encode, no quality loss, fast) when the
-  user keeps the original resolution; re-encoding only happens when the user
-  explicitly picks a different resolution.
-- Output aspect ratio always matches the source (no auto-crop to 9:16).
+### Đầu vào Video
+- Thời lượng tối đa: 60 phút. Dung lượng file tối đa: 2 GB.
+- Định dạng chấp nhận: bất kỳ định dạng nào FFmpeg có thể đọc (MP4, MOV, MKV, AVI, WebM, FLV, …).
+- Phương thức đầu vào: tải file trực tiếp, hoặc nhập URL từ YouTube/TikTok qua `yt-dlp` (đối với các video mà người dùng sở hữu/có bản quyền).
+- Xử lý mỗi lần một video trên mỗi dự án; nhiều dự án có thể được xếp hàng đợi xử lý tuần tự (không có yêu cầu xử lý song song).
+- Độ phân giải đầu ra: người dùng có thể chọn cho mỗi lần xuất. Hành vi mặc định là sao chép luồng video gốc (không encode lại, không giảm chất lượng, nhanh) khi người dùng giữ nguyên độ phân giải; việc encode lại chỉ xảy ra khi người dùng chủ động chọn một độ phân giải khác.
+- Tỷ lệ khung hình đầu ra luôn khớp với nguồn (không tự động cắt thành 9:16).
 
-### Speech-to-Text
-- Primary engine: **ElevenLabs Scribe** (word-level timestamps + speaker
-  diarization in a single call).
-- Fallback engine: **Whisper running locally** (`faster-whisper`, default
-  model size `medium`), used automatically when Scribe fails or the
-  account's ElevenLabs quota is exhausted.
-- Diarization is required — some source videos have multiple speakers, and
-  each speaker gets mapped to a distinct dubbing voice later.
+### Chuyển giọng nói thành văn bản (Speech-to-Text)
+- Engine chính: **ElevenLabs Scribe** (có dấu thời gian ở mức độ từng từ + phân tách người nói trong một lần gọi API).
+- Engine dự phòng: **Whisper chạy local** (`faster-whisper`, mô hình mặc định kích thước `medium`), được tự động sử dụng khi Scribe bị lỗi hoặc tài khoản hết hạn mức ElevenLabs.
+- Bắt buộc phải có tính năng phân tách người nói (Diarization) — một số video nguồn có nhiều người nói, và mỗi người nói sau này sẽ được ánh xạ tới một giọng lồng tiếng riêng biệt.
 
-### Translation
-- Engine is chosen per project: **Gemini** or **OpenAI**, both keys already
-  held by the user (`.env`).
-- Translation strategy: the whole transcript is used as context; segments
-  are translated in chunks (~10–20 sentences) rather than sentence-by-sentence,
-  to preserve pronouns/references correctly.
-- A **global glossary** (source term → target term, not translated) applies
-  across all projects.
-- Tone: natural, conversational Vietnamese (as spoken on YouTube/TikTok),
-  not formal/literal.
-- Translation is **not** constrained to match spoken-duration of the source
-  sentence — full meaning is preserved even if that makes the sentence
-  longer or shorter than the original. Timing drift is absorbed downstream
-  (see §Timing Sync).
+### Dịch thuật
+- Engine được chọn theo từng dự án: **Gemini** hoặc **OpenAI**, cả hai key đã được người dùng sở hữu (`.env`).
+- Chiến lược dịch thuật: toàn bộ bản phiên âm được sử dụng làm ngữ cảnh; các đoạn văn bản được dịch theo từng khối (~10-20 câu) thay vì dịch từng câu một, để bảo toàn chính xác các đại từ/tham chiếu.
+- Một **bảng thuật ngữ chung (global glossary)** (từ nguồn → từ đích, không dịch) áp dụng cho tất cả các dự án.
+- Giọng điệu: tiếng Việt giao tiếp, tự nhiên (như văn nói trên YouTube/TikTok), không trang trọng/dịch sát nghĩa đen.
+- Dịch thuật **không** bị gò bó phải khớp với thời lượng nói của câu gốc — ý nghĩa đầy đủ được bảo toàn ngay cả khi làm cho câu dài hơn hoặc ngắn hơn bản gốc. Sự lệch thời gian sẽ được xử lý ở bước sau (xem §Đồng bộ thời gian).
 
-### Timing Synchronization
-Order of correction applied per segment, cheapest/least-destructive first:
-1. TTS **speaking rate** is adjusted per segment to get as close as possible
-   to the original segment's duration.
-2. Natural silence gaps between segments are used as slack/padding.
-3. As a last resort, FFmpeg `atempo` stretches/compresses the generated
-   audio to force-fit the original segment's time window.
+### Đồng bộ thời gian
+Thứ tự các cách điều chỉnh được áp dụng cho mỗi đoạn (segment), ưu tiên cách rẻ nhất/ít ảnh hưởng nhất trước:
+1. **Tốc độ nói** của TTS được điều chỉnh theo từng đoạn để đạt được thời lượng gần nhất có thể với đoạn gốc.
+2. Khoảng lặng tự nhiên giữa các đoạn được dùng làm khoảng đệm/thời gian co giãn.
+3. Giải pháp cuối cùng, FFmpeg `atempo` sẽ kéo giãn/nén âm thanh được tạo ra để bắt buộc khớp với khung thời gian của đoạn gốc.
 
-### Text-to-Speech
-- Primary engine: **edge-tts** (free, natural-sounding Vietnamese voices:
-  HoaiMy/NamMinh). This is an unofficial API and can break without notice.
-- On edge-tts failure, the user is **notified and asked** whether to
-  fall back to **Gemini TTS** — this is not an automatic silent switch.
-- Voice selection: user picks from a voice catalog, with audio preview.
-  Detected speakers are auto-mapped to distinct voices; user can override
-  and adjust per-voice speed/pitch.
-- No voice cloning (explicitly out of scope — Vietnamese cloning quality is
-  poor and the user's machine has no GPU).
+### Chuyển văn bản thành giọng nói (Text-to-Speech)
+- Engine chính: **edge-tts** (miễn phí, giọng tiếng Việt tự nhiên: HoaiMy/NamMinh). Đây là một API không chính thức và có thể ngừng hoạt động mà không báo trước.
+- Khi edge-tts bị lỗi, người dùng sẽ được **thông báo và hỏi** xem có muốn chuyển sang dự phòng bằng **Gemini TTS** không — đây không phải là chuyển đổi ngầm tự động.
+- Lựa chọn giọng nói: người dùng chọn từ danh mục giọng nói, có âm thanh nghe thử. Các người nói được phát hiện sẽ tự động ánh xạ tới các giọng riêng biệt; người dùng có thể ghi đè và điều chỉnh tốc độ/cao độ của từng giọng.
+- Không sao chép giọng nói (Voice cloning) (được loại bỏ rõ ràng khỏi phạm vi — chất lượng sao chép giọng tiếng Việt kém và máy tính của người dùng không có GPU).
 
-### Audio Mixing
-Chosen **per project**, one of:
-- **A. Silent background** — only the new Vietnamese voice track, original
-  audio fully removed.
-- **B. Music preserved** — original vocals removed via **Demucs** source
-  separation, new voice mixed over the remaining background music/effects
-  stem, with a user-adjustable volume slider. (Note: Demucs on CPU runs at
-  roughly 1.5× real-time — a 60-minute video's separation step alone takes
-  ~90 minutes.)
-- **C. Ducking** — original full audio kept but automatically lowered in
-  volume under the new voice track, with a user-adjustable slider.
+### Trộn âm thanh (Audio Mixing)
+Được chọn **theo từng dự án**, một trong các tùy chọn:
+- **A. Nền im lặng** — chỉ có track giọng tiếng Việt mới, âm thanh gốc bị xóa hoàn toàn.
+- **B. Giữ lại nhạc** — giọng nói gốc được loại bỏ qua việc tách nguồn bằng **Demucs**, giọng mới được trộn đè lên phần nhạc nền/hiệu ứng còn lại, có thanh trượt điều chỉnh âm lượng cho người dùng. (Lưu ý: Demucs chạy trên CPU có tốc độ khoảng 1.5× thời gian thực — chỉ riêng bước tách âm của video 60 phút sẽ mất ~90 phút).
+- **C. Ducking (Giảm âm nền)** — giữ nguyên toàn bộ âm thanh gốc nhưng tự động giảm âm lượng xuống dưới track giọng mới, có thanh trượt điều chỉnh cho người dùng.
 
-### Subtitles
-- Vietnamese only (no source-language or bilingual subtitle requirement).
-- Format: SRT.
-- Three deliverables generated together:
-  1. A standalone `.srt` file (downloadable).
-  2. A video with the subtitle **soft-embedded** (toggleable in players that
-     support it, e.g. MKV/MP4 subtitle track).
-  3. A second video with the subtitle **burned in** (hardcoded, not
-     toggleable), with user-configurable font size/color/position
-     (TikTok-style: large text, black outline, centered).
+### Phụ đề
+- Chỉ tiếng Việt (không có yêu cầu phụ đề ngôn ngữ nguồn hoặc song ngữ).
+- Định dạng: SRT.
+- 3 sản phẩm đầu ra được tạo ra cùng lúc:
+  1. Một file `.srt` độc lập (có thể tải xuống).
+  2. Một video với phụ đề **được nhúng mềm (soft-embedded)** (có thể bật/tắt trong các trình phát hỗ trợ, ví dụ: track phụ đề MKV/MP4).
+  3. Một video thứ hai với phụ đề **được ghi cứng (burned in)** (hardcode, không thể tắt), với kích thước/màu sắc/vị trí font chữ do người dùng cấu hình (Phong cách TikTok: chữ to, viền đen, căn giữa).
 
-### Editing
-- Editor style: sentence-list table (timestamp | source text | translated
-  text | play | regenerate) for the first version. A waveform/timeline
-  editor is an explicitly deferred future phase.
-- Users can edit: the source transcript text, and the translated text.
-- Users can preview (play) each dubbed sentence individually, and can
-  regenerate just one sentence's dubbed audio (not the whole video) after
-  editing it.
+### Chỉnh sửa (Editing)
+- Kiểu trình chỉnh sửa: bảng danh sách câu (dấu thời gian | văn bản nguồn | văn bản dịch | phát | tạo lại) cho phiên bản đầu tiên. Trình chỉnh sửa dạng sóng/dòng thời gian (waveform/timeline) được hoãn lại rõ ràng cho giai đoạn sau.
+- Người dùng có thể chỉnh sửa: văn bản phiên âm nguồn, và văn bản dịch.
+- Người dùng có thể xem trước (phát) riêng lẻ từng câu đã lồng tiếng, và có thể tạo lại âm thanh lồng tiếng của chỉ một câu (không phải toàn bộ video) sau khi chỉnh sửa nó.
 
-### Processing / Background Jobs
-- All heavy operations (transcribe, translate, dub, export) run as
-  **background jobs** (Celery + Redis), never synchronously inside an HTTP
-  request, to avoid timeouts on 60-minute videos.
-- The UI shows per-step progress percentage plus a realtime log, delivered
-  over **WebSocket**.
-- Closing the browser tab does **not** stop processing — the job continues
-  server-side and the user sees the result when they return.
+### Xử lý / Tác vụ nền (Background Jobs)
+- Tất cả các thao tác nặng (phiên âm, dịch, lồng tiếng, xuất) đều chạy dưới dạng **tác vụ nền** (Celery + Redis), không bao giờ chạy đồng bộ bên trong một HTTP request, để tránh timeout đối với các video 60 phút.
+- Giao diện hiển thị phần trăm tiến trình từng bước cộng với log thời gian thực, được phân phối qua **WebSocket**.
+- Đóng tab trình duyệt sẽ **không** dừng quá trình xử lý — tác vụ tiếp tục ở phía server và người dùng sẽ thấy kết quả khi họ quay lại.
 
-### Storage & Data Lifecycle
-- Files (source video, intermediate audio, final exports) are stored in
-  **Cloudflare R2**.
-- Temporary intermediate files (extracted audio, separated stems, per-segment
-  TTS clips) are deleted as soon as they are no longer needed by a
-  downstream step.
-- The full project (video + exports) is deleted 7 days after creation; the
-  user is warned in-app 1 day before deletion.
+### Lưu trữ & Vòng đời dữ liệu
+- File (video nguồn, âm thanh trung gian, các file xuất cuối cùng) được lưu trữ trên **Cloudflare R2**.
+- Các file trung gian tạm thời (âm thanh được trích xuất, các luồng âm thanh đã tách, các clip TTS từng đoạn) sẽ bị xóa ngay khi chúng không còn cần thiết cho bước tiếp theo.
+- Toàn bộ dự án (video + file xuất) sẽ bị xóa sau 7 ngày kể từ khi tạo; người dùng được cảnh báo trong app 1 ngày trước khi xóa.
 
-### Database
-- **PostgreSQL hosted on Supabase**, used for both local development and
-  production (no separate local Postgres instance) — this is a conscious
-  trade-off accepted by the user: local development requires network
-  connectivity to Supabase.
-- **Supabase Auth** provides authentication; the backend verifies the
-  Supabase-issued JWT on each request.
+### Cơ sở dữ liệu (Database)
+- **PostgreSQL được host trên Supabase**, dùng cho cả môi trường dev (phát triển local) và production (không có instance Postgres local riêng biệt) — đây là sự đánh đổi có chủ ý được người dùng chấp nhận: việc phát triển local yêu cầu có kết nối mạng tới Supabase.
+- **Supabase Auth** cung cấp tính năng xác thực; backend sẽ xác minh chuỗi JWT do Supabase cấp trên mỗi request.
 
-### Screens
-Landing page · Login/Register · Dashboard (project list + usage) · New
-Project (upload/URL + language + audio-mode selection) · Editor (transcript
-+ translation + voice assignment, tabs on one screen) · Preview/Export ·
-Settings (global glossary, default voice preferences) · Admin (user list,
-per-user quota, usage/cost overview) · Project History.
+### Các màn hình (Screens)
+Trang chủ (Landing page) · Đăng nhập/Đăng ký · Bảng điều khiển (Danh sách dự án + mức sử dụng) · Dự án mới (Tải lên/URL + ngôn ngữ + chọn chế độ âm thanh) · Trình chỉnh sửa (phiên âm + dịch + gán giọng nói, các tab trên cùng một màn hình) · Xem trước/Xuất · Cài đặt (Bảng thuật ngữ chung, tùy chọn giọng nói mặc định) · Admin (Danh sách người dùng, hạn mức mỗi người dùng, tổng quan mức sử dụng/chi phí) · Lịch sử dự án.
 
-### Quotas & Cost Tracking
-- Every external API call (STT/translation/TTS) is logged with provider,
-  operation, cost, and unit count, tied to the user and project — for
-  visibility, not automatic enforcement beyond quota limits.
-- Admins set a monthly minutes quota per user manually (no fixed formula).
+### Hạn mức & Theo dõi chi phí
+- Mọi lệnh gọi API bên ngoài (STT/dịch/TTS) đều được ghi log lại với nhà cung cấp, thao tác, chi phí, và số lượng đơn vị, gắn liền với người dùng và dự án — nhằm mục đích hiển thị, không tự động thực thi vượt quá giới hạn hạn mức.
+- Quản trị viên thiết lập số phút tối đa mỗi tháng cho từng người dùng một cách thủ công (không có công thức cố định).
 
 ### API Keys / Secrets
-- All third-party API keys (ElevenLabs, Gemini, OpenAI, Supabase, Cloudflare
-  R2) are supplied via `.env` for now. The user registers for these
-  services themselves; this project only provides setup documentation. No
-  in-app "enter your API key" settings screen is built at this stage.
+- Tất cả các API keys của bên thứ ba (ElevenLabs, Gemini, OpenAI, Supabase, Cloudflare R2) đều được cung cấp qua file `.env` cho thời điểm hiện tại. Người dùng tự đăng ký các dịch vụ này; dự án này chỉ cung cấp tài liệu hướng dẫn cài đặt. Không có màn hình UI cài đặt "nhập API key của bạn" trong app được xây dựng ở giai đoạn này.
 
-## 3. Architecture
+## 3. Kiến trúc (Architecture)
 
 ```
 ┌─────────────┐      REST + WebSocket      ┌──────────────────┐
-│  Next.js     │ ─────────────────────────▶│  FastAPI backend  │
-│  (Tailwind + │                            │  (verifies        │
-│  shadcn/ui)  │◀─── WS progress/log ───────│   Supabase JWT)   │
+│  Next.js    │ ─────────────────────────▶│  FastAPI backend │
+│  (Tailwind+ │                            │  (xác minh      │
+│  shadcn/ui) │◀─── WS progress/log ───────│   Supabase JWT)  │
 └─────────────┘                            └─────────┬─────────┘
-       │                                              │ enqueue
-       │ Supabase Auth SDK                             ▼
-       │                                    ┌──────────────────┐
-       ▼                                    │  Redis (queue)    │
+       │                                             │ enqueue
+       │ Supabase Auth SDK                           ▼
+       │                                   ┌──────────────────┐
+       ▼                                   │  Redis (queue)   │
 ┌─────────────┐                            └─────────┬─────────┘
-│  Supabase    │                                      ▼
-│  (Postgres + │                            ┌──────────────────┐
-│   Auth)      │◀──── SQLModel ─────────────│  Celery workers   │
+│  Supabase   │                                      ▼
+│  (Postgres+ │                            ┌──────────────────┐
+│   Auth)     │◀──── SQLModel ─────────────│  Celery workers  │
 └─────────────┘                            │  - STT (ElevenLabs/│
-                                            │    Whisper local) │
-┌─────────────┐                            │  - Translate       │
-│  Cloudflare  │◀──── upload/download ──────│    (Gemini/OpenAI) │
-│  R2 (video,  │                            │  - TTS (edge-tts/  │
-│   audio)     │                            │    Gemini TTS)     │
-└─────────────┘                            │  - FFmpeg/Demucs   │
-                                            │    (sync + mux)    │
-                                            └──────────────────┘
+                                           │    Whisper local)│
+┌─────────────┐                            │  - Dịch          │
+│  Cloudflare │◀──── upload/download ──────│    (Gemini/OpenAI)│
+│  R2 (video, │                            │  - TTS (edge-tts/ │
+│   audio)    │                            │    Gemini TTS)   │
+└─────────────┘                            │  - FFmpeg/Demucs │
+                                           │    (sync + mux)  │
+                                           └──────────────────┘
 ```
 
-Docker Compose (same file for dev and prod, different env vars) runs:
-backend API, Celery worker, Redis, frontend. Postgres is intentionally
-**not** in the compose file — Supabase (remote) is used in both dev and
-prod per the requirements above.
+Docker Compose (cùng 1 file cho dev và prod, khác biến môi trường) sẽ chạy: API backend, Celery worker, Redis, frontend. Postgres cố ý **không** nằm trong compose file — Supabase (remote) được sử dụng cho cả dev và prod theo các yêu cầu phía trên.
 
-## 4. Tech Stack
+## 4. Tech Stack (Công nghệ sử dụng)
 
-| Component | Choice | Why |
+| Thành phần | Lựa chọn | Lý do |
 |---|---|---|
-| Frontend | Next.js (App Router) + TypeScript + TailwindCSS + shadcn/ui | SSR helps the public landing page's SEO; shadcn/ui gives a modern, highly customizable component set suited to a data-heavy editor. No dark mode. |
-| Backend | FastAPI (Python 3.12, in Docker) | Demucs, edge-tts, and the FFmpeg/audio pipeline are native Python; avoids bridging to a second runtime. Python 3.12 (not the host's 3.14) is used inside Docker for PyTorch/Demucs/faster-whisper compatibility. |
-| ORM | SQLModel + Alembic | Prisma for Python (`prisma-client-py`) is archived/unmaintained (confirmed via GitHub — archived 2025-04-15, capped at Python 3.10). SQLModel is FastAPI-native, type-safe, Pydantic-based; Alembic handles migrations. |
-| Queue | Celery + Redis | Required because processing a 60-minute video takes on the order of hours; jobs must survive the user closing their browser tab. |
-| Realtime | WebSocket | Two-way channel used to stream progress % and log lines per job. |
-| Database / Auth | Supabase (Postgres + Auth) | Single hosted service for both, used consistently across dev and prod. |
-| Storage | Cloudflare R2 | No egress fees, cost-effective for video-sized objects. |
-| Video/audio tooling | FFmpeg, Demucs, yt-dlp | FFmpeg for mux/encode/atempo; Demucs for vocal/music separation; yt-dlp for YouTube/TikTok import. |
-| Deployment | Railway (frontend + backend + worker + Redis), Supabase, Cloudflare R2 | Railway runs long-lived worker processes (unlike serverless platforms, which can't host multi-hour jobs). |
-| Repo layout | Monorepo: `frontend/`, `backend/` | Single clone, single source of truth for the two halves of the app. |
+| Frontend | Next.js (App Router) + TypeScript + TailwindCSS + shadcn/ui | SSR giúp SEO cho trang chủ; shadcn/ui cung cấp bộ component hiện đại, tính tùy biến cao phù hợp với trình chỉnh sửa nhiều dữ liệu. Không có chế độ Dark mode. |
+| Backend | FastAPI (Python 3.12, trong Docker) | Demucs, edge-tts, và luồng xử lý FFmpeg/âm thanh đều là Python native; tránh việc phải kết nối sang runtime thứ hai. Python 3.12 (không phải 3.14 của máy host) được dùng trong Docker để tương thích với PyTorch/Demucs/faster-whisper. |
+| ORM | SQLModel + Alembic | Prisma cho Python (`prisma-client-py`) đã bị lưu trữ/không còn bảo trì (xác nhận qua GitHub — archived 2025-04-15, giới hạn ở Python 3.10). SQLModel hỗ trợ FastAPI-native, type-safe, dựa trên Pydantic; Alembic xử lý migrations. |
+| Hàng đợi (Queue) | Celery + Redis | Bắt buộc vì việc xử lý video 60 phút sẽ mất hàng giờ; các tác vụ phải sống sót kể cả khi người dùng đóng tab trình duyệt. |
+| Thời gian thực (Realtime) | WebSocket | Kênh 2 chiều được dùng để stream % tiến độ và các dòng log cho từng tác vụ. |
+| Database / Auth | Supabase (Postgres + Auth) | Dịch vụ được host duy nhất cho cả hai, dùng nhất quán giữa dev và prod. |
+| Lưu trữ (Storage) | Cloudflare R2 | Không tốn phí băng thông ra (egress fees), tối ưu chi phí cho các object kích thước lớn như video. |
+| Công cụ Video/Audio | FFmpeg, Demucs, yt-dlp | FFmpeg để mux/encode/atempo; Demucs để tách giọng nói/âm nhạc; yt-dlp để tải từ YouTube/TikTok. |
+| Triển khai (Deployment) | Railway (frontend + backend + worker + Redis), Supabase, Cloudflare R2 | Railway chạy được các worker process sống lâu (khác với các nền tảng serverless không thể host các tác vụ kéo dài nhiều giờ). |
+| Cấu trúc Repo | Monorepo: `frontend/`, `backend/` | Chỉ cần clone một lần, có nguồn chân lý duy nhất (single source of truth) cho cả 2 nửa của ứng dụng. |
 
-## 5. Database Schema
+## 5. Schema Cơ sở dữ liệu (Database Schema)
 
 ```
-profiles (mirrors supabase auth.users)
+profiles (phản chiếu supabase auth.users)
   id (= auth.users.id), email, role[user|admin], created_at
 
 quotas
@@ -264,16 +194,11 @@ usage_logs
   api_provider, operation, cost_usd, units, created_at
 ```
 
-Key relationships: a project has many transcript segments; each transcript
-segment has exactly one translation segment and (once dubbed) exactly one
-dubbed-audio segment; a project has many voices (one per detected speaker),
-many jobs (one per pipeline stage run), and many exports (one per export
-type requested).
+Các quan hệ (relationships) chính: một dự án (project) có nhiều đoạn phiên âm (transcript segments); mỗi đoạn phiên âm có chính xác một đoạn dịch (translation segment) và (một khi được lồng tiếng) chính xác một đoạn âm thanh lồng tiếng (dubbed-audio segment); một dự án có nhiều giọng nói (một giọng cho mỗi người nói được phát hiện), nhiều tác vụ/jobs (mỗi bước trong pipeline chạy là một job), và nhiều bản xuất/exports (mỗi loại export được yêu cầu là một bản xuất).
 
-## 6. API Design
+## 6. Thiết kế API
 
-Auth is handled client-side via the Supabase SDK; the backend only verifies
-the Supabase-issued JWT via middleware.
+Auth được xử lý ở phía client thông qua Supabase SDK; backend chỉ xác minh JWT do Supabase cấp thông qua middleware.
 
 ```
 POST   /api/projects
@@ -285,19 +210,19 @@ DELETE /api/projects/{id}
 POST   /api/projects/{id}/upload            (multipart file)
 POST   /api/projects/{id}/import-url        {url}
 
-POST   /api/projects/{id}/transcribe        → enqueue Celery job
+POST   /api/projects/{id}/transcribe        → đẩy vào queue Celery job
 GET    /api/projects/{id}/transcript
 PATCH  /api/projects/{id}/transcript/{segment_id}
 
-POST   /api/projects/{id}/translate         {engine}  → enqueue job
+POST   /api/projects/{id}/translate         {engine}  → đẩy vào queue job
 GET    /api/projects/{id}/translation
 PATCH  /api/projects/{id}/translation/{segment_id}
 
 GET    /api/voices/catalog
 GET    /api/voices/preview?engine=&voice_id=
-PUT    /api/projects/{id}/voices            (assign voice per speaker)
+PUT    /api/projects/{id}/voices            (gán giọng nói cho từng người nói)
 
-POST   /api/projects/{id}/dub               → enqueue TTS+sync+mux job
+POST   /api/projects/{id}/dub               → đẩy vào queue TTS+sync+mux job
 POST   /api/projects/{id}/segments/{id}/regenerate
 
 GET    /api/projects/{id}/preview
@@ -314,11 +239,9 @@ PATCH  /api/admin/users/{id}/quota
 GET    /api/admin/usage
 ```
 
-Every endpoint that triggers transcription, translation, dubbing, or export
-enqueues a background job and returns immediately; it does not block the
-HTTP request while the job runs.
+Mỗi endpoint có chức năng kích hoạt phiên âm, dịch, lồng tiếng, hoặc xuất video sẽ đưa một tác vụ nền vào hàng đợi và trả về kết quả ngay lập tức; nó không chặn (block) HTTP request trong khi tác vụ đang chạy.
 
-## 7. Folder Structure
+## 7. Cấu trúc thư mục
 
 ```
 tool/
@@ -337,7 +260,7 @@ tool/
 │
 ├── backend/                           # FastAPI
 │   ├── app/
-│   │   ├── api/                       # routers per resource
+│   │   ├── api/                       # routers cho từng resource
 │   │   ├── models/                    # SQLModel
 │   │   ├── services/
 │   │   │   ├── stt/                   # elevenlabs.py, whisper_local.py
@@ -360,51 +283,32 @@ tool/
 └── README.md
 ```
 
-## 8. Implementation Assumptions (not gated on further user confirmation)
+## 8. Các giả định triển khai (Không chờ người dùng xác nhận thêm)
 
-- Whisper local fallback defaults to the `medium` model size, overridable
-  via `.env`.
-- Dev requires internet connectivity to reach Supabase (direct consequence
-  of using Supabase in dev, not local Postgres).
-- Backend runs Python 3.12 inside Docker regardless of the host machine's
-  Python version.
-- FFmpeg ships inside the backend Docker image; the host machine does not
-  need it installed separately.
+- Bản dự phòng Whisper local mặc định dùng mô hình kích thước `medium`, có thể ghi đè qua `.env`.
+- Dev yêu cầu có kết nối internet để chạm tới Supabase (hệ quả trực tiếp của việc dùng Supabase trong dev, thay vì Postgres local).
+- Backend chạy Python 3.12 bên trong Docker bất kể phiên bản Python của máy host là gì.
+- FFmpeg được tích hợp sẵn bên trong Docker image của backend; máy host không cần phải cài đặt nó riêng lẻ.
 
-## 9. Explicitly Out of Scope (for this phase)
+## 9. Nằm ngoài phạm vi rõ ràng (Cho giai đoạn này)
 
-- Voice cloning.
-- Timeline/waveform editor (deferred to a future phase; sentence-list
-  editor ships first).
-- Source-language or bilingual subtitles (Vietnamese-only for now).
-- In-app API key management UI (keys are `.env`-only for now).
-- Automatic quota enforcement beyond manual admin-set limits.
-- Any "offline/private" processing mode — every project uses the cloud
-  engines described above.
+- Sao chép giọng nói (Voice cloning).
+- Trình chỉnh sửa dạng sóng/dòng thời gian (Timeline/waveform editor) (hoãn lại cho giai đoạn sau; trình chỉnh sửa danh sách câu sẽ được phát hành trước).
+- Phụ đề ngôn ngữ nguồn hoặc song ngữ (hiện tại chỉ có tiếng Việt).
+- Giao diện người dùng quản lý API key trong ứng dụng (các key hiện chỉ nằm trong `.env`).
+- Tự động thực thi hạn mức vượt quá giới hạn thiết lập thủ công của quản trị viên.
+- Bất kỳ chế độ xử lý "offline/riêng tư" nào — mọi dự án đều sử dụng các engine đám mây (cloud engines) được mô tả ở trên.
 
-## 10. Implementation Phases (for the follow-up plan)
+## 10. Các giai đoạn triển khai (Dành cho kế hoạch tiếp theo)
 
-1. Project setup — repo scaffolding, Docker Compose, frontend/backend
-   health check, Supabase connection, CI-less local dev loop.
-2. Upload — file upload + YouTube/TikTok URL import, video metadata
-   extraction, project creation flow.
-3. Speech-to-text — ElevenLabs Scribe integration, Whisper local fallback,
-   Celery job wiring, WebSocket progress.
-4. Transcript editor — sentence-list UI, edit/save segment text.
-5. Translation — Gemini/OpenAI integration, chunked context-aware
-   translation, glossary application, translation editor UI.
-6. Text-to-speech — edge-tts integration, Gemini TTS fallback prompt,
-   voice catalog + preview, speaker→voice mapping UI.
-7. FFmpeg pipeline — timing sync (rate adjust → silence padding →
-   atempo), Demucs separation / ducking, mux into final video, subtitle
-   burn-in and soft-embed.
-8. Preview & export — preview player, per-segment regenerate, export
-   flow (video / video+hardsub / srt), download, R2 lifecycle (temp
-   cleanup, 7-day expiry with 1-day warning).
-9. Auth, admin, quotas — Supabase Auth wiring, role-based access,
-   admin screens (user list, quota editor, usage/cost overview),
-   settings screen (global glossary, default voice prefs).
+1. Thiết lập dự án — tạo khung repo (scaffolding), Docker Compose, kiểm tra tình trạng (health check) frontend/backend, kết nối Supabase, luồng dev local không cần CI.
+2. Tải lên (Upload) — tải file lên + nhập URL YouTube/TikTok, trích xuất metadata của video, luồng tạo dự án.
+3. Chuyển giọng nói thành văn bản (Speech-to-text) — tích hợp ElevenLabs Scribe, dự phòng Whisper local, kết nối Celery job, theo dõi tiến độ qua WebSocket.
+4. Trình chỉnh sửa phiên âm (Transcript editor) — giao diện danh sách câu, chỉnh sửa/lưu văn bản của từng đoạn.
+5. Dịch thuật (Translation) — tích hợp Gemini/OpenAI, dịch theo ngữ cảnh chia khối (chunk), áp dụng bảng thuật ngữ, giao diện chỉnh sửa bản dịch.
+6. Chuyển văn bản thành giọng nói (Text-to-speech) — tích hợp edge-tts, prompt dự phòng Gemini TTS, danh mục giọng nói + nghe thử, giao diện ánh xạ người nói→giọng nói.
+7. Luồng FFmpeg — đồng bộ thời gian (điều chỉnh tốc độ → thêm khoảng im lặng padding → atempo), tách âm Demucs / ducking, trộn (mux) thành video cuối cùng, ghi cứng phụ đề và nhúng mềm phụ đề.
+8. Xem trước & Xuất (Preview & export) — trình xem trước (player), tạo lại (regenerate) theo từng đoạn, luồng xuất (video / video+hardsub / srt), tải xuống, vòng đời R2 (dọn dẹp file tạm, hết hạn sau 7 ngày kèm cảnh báo trước 1 ngày).
+9. Auth, admin, hạn mức (quotas) — kết nối Supabase Auth, quyền truy cập theo vai trò (role), màn hình admin (danh sách người dùng, chỉnh sửa hạn mức, tổng quan mức sử dụng/chi phí), màn hình cài đặt (bảng thuật ngữ chung, tùy chọn giọng nói mặc định).
 
-Each phase ends with tests run, errors checked, and a report back before
-moving to the next phase — no phase proceeds past a decision point that
-needs user confirmation without stopping to ask first.
+Mỗi giai đoạn kết thúc sau khi đã chạy tests, kiểm tra lỗi, và báo cáo lại trước khi chuyển sang giai đoạn tiếp theo — không có giai đoạn nào được tiếp tục vượt qua điểm quyết định cần người dùng xác nhận mà không dừng lại để hỏi trước.
