@@ -10,3 +10,4 @@ build/
 .next/
 *.log
 backend/.venv/
+backend/*.egg-info/
