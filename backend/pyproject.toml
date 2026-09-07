@@ -19,6 +19,7 @@ dependencies = [
     "httpx>=0.27",
     "python-multipart>=0.0.9",
     "boto3>=1.34",
+    "yt-dlp>=2024.8",
 ]
 
 [project.optional-dependencies]

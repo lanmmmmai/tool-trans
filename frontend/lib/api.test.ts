@@ -14,4 +14,13 @@ describe("apiFetch", () => {
       undefined
     );
   });
+
+  it("listProjects fetches from /api/projects", async () => {
+    const { listProjects } = await import("./api");
+    await listProjects();
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/projects",
+      undefined
+    );
+  });
 });
