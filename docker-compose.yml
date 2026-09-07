@@ -30,6 +30,10 @@ services:
   frontend:
     build: ./frontend
     env_file: frontend/.env.local
+    environment:
+      # Server-side (SSR) fetches run inside this container, so they must
+      # use the Docker network's service name, not "localhost".
+      INTERNAL_API_URL: http://backend:8000
     volumes:
       - ./frontend:/app
       - /app/node_modules
