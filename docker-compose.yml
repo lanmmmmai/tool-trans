@@ -1,0 +1,43 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: ./backend
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+
+  worker:
+    build: ./backend
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+    command: celery -A app.core.celery_app worker --loglevel=info
+    depends_on:
+      - redis
+
+  frontend:
+    build: ./frontend
+    env_file: frontend/.env.local
+    environment:
+      # Server-side (SSR) fetches run inside this container, so they must
+      # use the Docker network's service name, not "localhost".
+      INTERNAL_API_URL: http://backend:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
