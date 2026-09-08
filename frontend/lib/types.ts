@@ -34,3 +34,18 @@ export interface TranslationSegment {
   translated_text: string;
   translated_text_edited: string | null;
 }
+
+export interface VoiceCatalogEntry {
+  voice_id: string;
+  name: string;
+  gender: string;
+  engine: string;
+}
+
+export interface VoiceAssignment {
+  speaker_label: string;
+  engine: string;
+  voice_id: string;
+  speed: number;
+  pitch: number;
+}
