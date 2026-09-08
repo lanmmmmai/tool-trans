@@ -24,6 +24,7 @@ dependencies = [
     "google-genai>=0.3",
     "openai>=1.50",
     "edge-tts>=6.1",
+    "demucs>=4.0",
 ]
 
 [project.optional-dependencies]
