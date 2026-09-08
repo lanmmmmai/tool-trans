@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.glossary import router as glossary_router
 from app.api.projects import router as projects_router
 from app.api.transcript import router as transcript_router
+from app.api.translation import router as translation_router
 from app.api.ws_progress import router as ws_progress_router
 
 app = FastAPI(title="AI Video Dubbing API")
@@ -22,6 +24,8 @@ app.add_middleware(
 
 app.include_router(projects_router)
 app.include_router(transcript_router)
+app.include_router(translation_router)
+app.include_router(glossary_router)
 app.include_router(ws_progress_router)
 
 

@@ -35,4 +35,16 @@ describe("apiFetch", () => {
       })
     );
   });
+
+  it("startTranslate posts the chosen engine", async () => {
+    const { startTranslate } = await import("./api");
+    await startTranslate("proj-1", "openai");
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/projects/proj-1/translate",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ engine: "openai" }),
+      })
+    );
+  });
 });
