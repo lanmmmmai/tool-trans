@@ -22,3 +22,15 @@ export interface TranscriptSegment {
   source_text_edited: string | null;
   confidence: number | null;
 }
+
+export interface TranslationSegment {
+  id: string;
+  segment_id: string;
+  seq_index: number;
+  start_time: number;
+  end_time: number;
+  speaker_label: string;
+  source_text: string;
+  translated_text: string;
+  translated_text_edited: string | null;
+}

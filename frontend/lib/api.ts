@@ -1,4 +1,4 @@
-import type { Project, TranscriptSegment } from "./types";
+import type { Project, TranscriptSegment, TranslationSegment } from "./types";
 
 function getApiBase(): string {
   // Server-side (SSR / Server Components) runs inside the frontend
@@ -74,5 +74,38 @@ export async function updateTranscriptSegment(
     body: JSON.stringify({ source_text_edited: text }),
   });
   if (!res.ok) throw new Error("Failed to update segment");
+  return res.json();
+}
+
+export async function startTranslate(projectId: string, engineName: "gemini" | "openai") {
+  const res = await apiFetch(`/api/projects/${projectId}/translate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ engine: engineName }),
+  });
+  if (!res.ok) throw new Error("Failed to start translation");
+  return res.json();
+}
+
+export async function getTranslation(projectId: string): Promise<TranslationSegment[]> {
+  const res = await apiFetch(`/api/projects/${projectId}/translation`);
+  if (!res.ok) throw new Error("Failed to load translation");
+  return res.json();
+}
+
+export async function updateTranslationSegment(
+  projectId: string,
+  translationId: string,
+  text: string
+): Promise<TranslationSegment> {
+  const res = await apiFetch(
+    `/api/projects/${projectId}/translation/${translationId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ translated_text_edited: text }),
+    }
+  );
+  if (!res.ok) throw new Error("Failed to update translation");
   return res.json();
 }
