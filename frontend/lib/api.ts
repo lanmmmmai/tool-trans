@@ -1,4 +1,4 @@
-import type { Project } from "./types";
+import type { Project, TranscriptSegment } from "./types";
 
 function getApiBase(): string {
   // Server-side (SSR / Server Components) runs inside the frontend
@@ -55,4 +55,24 @@ export async function importVideoFromUrl(projectId: string, url: string): Promis
     body: JSON.stringify({ url }),
   });
   if (!res.ok) throw new Error("Failed to import video");
+}
+
+export async function getTranscript(projectId: string): Promise<TranscriptSegment[]> {
+  const res = await apiFetch(`/api/projects/${projectId}/transcript`);
+  if (!res.ok) throw new Error("Failed to load transcript");
+  return res.json();
+}
+
+export async function updateTranscriptSegment(
+  projectId: string,
+  segmentId: string,
+  text: string
+): Promise<TranscriptSegment> {
+  const res = await apiFetch(`/api/projects/${projectId}/transcript/${segmentId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source_text_edited: text }),
+  });
+  if (!res.ok) throw new Error("Failed to update segment");
+  return res.json();
 }

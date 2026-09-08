@@ -23,4 +23,16 @@ describe("apiFetch", () => {
       undefined
     );
   });
+
+  it("updateTranscriptSegment PATCHes the segment with edited text", async () => {
+    const { updateTranscriptSegment } = await import("./api");
+    await updateTranscriptSegment("proj-1", "seg-1", "Fixed text");
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/projects/proj-1/transcript/seg-1",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ source_text_edited: "Fixed text" }),
+      })
+    );
+  });
 });
