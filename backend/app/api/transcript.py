@@ -82,3 +82,28 @@ def get_transcript(
         .where(TranscriptSegment.project_id == project_id)
         .order_by(TranscriptSegment.seq_index)
     ).all()
+
+
+class TranscriptSegmentUpdate(BaseModel):
+    source_text_edited: str
+
+
+@router.patch("/{project_id}/transcript/{segment_id}", response_model=TranscriptSegmentRead)
+def update_transcript_segment(
+    project_id: str,
+    segment_id: str,
+    payload: TranscriptSegmentUpdate,
+    session: Session = Depends(get_session),
+    user_id: str = Depends(get_current_user_id),
+):
+    _get_owned_project(session, project_id, user_id)
+
+    segment = session.get(TranscriptSegment, segment_id)
+    if segment is None or segment.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Segment not found")
+
+    segment.source_text_edited = payload.source_text_edited
+    session.add(segment)
+    session.commit()
+    session.refresh(segment)
+    return segment
