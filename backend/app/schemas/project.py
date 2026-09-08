@@ -17,6 +17,7 @@ class ProjectUpdate(BaseModel):
     source_language: Optional[str] = None
     target_language: Optional[str] = None
     audio_mode: Optional[str] = None
+    background_volume: Optional[float] = None
     translate_engine: Optional[str] = None
     status: Optional[str] = None
 
@@ -29,6 +30,7 @@ class ProjectRead(BaseModel):
     target_language: str
     status: str
     audio_mode: str
+    background_volume: float
     translate_engine: Optional[str]
     created_at: datetime
     updated_at: datetime
