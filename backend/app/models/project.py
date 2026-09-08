@@ -15,6 +15,7 @@ class Project(SQLModel, table=True):
     target_language: str
     status: str = Field(default="draft")
     audio_mode: str
+    background_volume: float = Field(default=0.3)
     translate_engine: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
