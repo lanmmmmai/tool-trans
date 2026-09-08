@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.dub import router as dub_router
 from app.api.glossary import router as glossary_router
 from app.api.project_voices import router as project_voices_router
 from app.api.projects import router as projects_router
@@ -30,6 +31,7 @@ app.include_router(transcript_router)
 app.include_router(translation_router)
 app.include_router(glossary_router)
 app.include_router(voices_router)
+app.include_router(dub_router)
 app.include_router(ws_progress_router)
 
 
