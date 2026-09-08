@@ -6,7 +6,7 @@ celery_app = Celery(
     "video_dubbing",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["app.workers.ping"],
+    include=["app.workers.ping", "app.workers.transcribe"],
 )
 celery_app.conf.task_serializer = "json"
 celery_app.conf.result_serializer = "json"
