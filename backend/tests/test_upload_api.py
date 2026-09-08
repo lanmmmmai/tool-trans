@@ -3,6 +3,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
@@ -23,7 +24,16 @@ def override_get_session():
         yield session
 
 
-app.dependency_overrides[get_session] = override_get_session
+@pytest.fixture(autouse=True)
+def _use_this_modules_session_override():
+    # See test_transcript_api.py for why this is needed: the shared `app`
+    # singleton means the last-imported test file's module-level override
+    # otherwise wins for every file's tests.
+    app.dependency_overrides[get_session] = override_get_session
+    yield
+    app.dependency_overrides.pop(get_session, None)
+
+
 client = TestClient(app)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "tiny.mp4"
