@@ -1,4 +1,3 @@
-import asyncio
 import os
 import tempfile
 from datetime import datetime, timezone
@@ -7,7 +6,7 @@ from sqlmodel import Session, select
 
 from app.core.celery_app import celery_app
 from app.core.storage import get_r2_client
-from app.core.ws_manager import ws_manager
+from app.core.ws_manager import publish_progress_sync
 from app.db.session import engine
 from app.models.job import Job
 from app.models.transcript_segment import TranscriptSegment
@@ -21,7 +20,10 @@ def get_session_for_worker() -> Session:
 
 
 def broadcast_sync(project_id: str, message: dict) -> None:
-    asyncio.run(ws_manager.broadcast(project_id, message))
+    # Runs inside the Celery worker process — must cross the process
+    # boundary to reach the backend's live WebSocket connections, so this
+    # publishes over Redis rather than touching an in-memory WSManager.
+    publish_progress_sync(project_id, message)
 
 
 @celery_app.task(name="app.workers.transcribe.transcribe_task")
