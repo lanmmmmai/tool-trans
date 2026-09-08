@@ -1,4 +1,10 @@
-import type { Project, TranscriptSegment, TranslationSegment } from "./types";
+import type {
+  Project,
+  TranscriptSegment,
+  TranslationSegment,
+  VoiceAssignment,
+  VoiceCatalogEntry,
+} from "./types";
 
 function getApiBase(): string {
   // Server-side (SSR / Server Components) runs inside the frontend
@@ -107,5 +113,41 @@ export async function updateTranslationSegment(
     }
   );
   if (!res.ok) throw new Error("Failed to update translation");
+  return res.json();
+}
+
+export async function getVoiceCatalog(): Promise<VoiceCatalogEntry[]> {
+  const res = await apiFetch("/api/voices/catalog");
+  if (!res.ok) throw new Error("Failed to load voice catalog");
+  return res.json();
+}
+
+export function previewVoiceUrl(engine: string, voiceId: string): string {
+  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  return `${base}/api/voices/preview?engine=${encodeURIComponent(engine)}&voice_id=${encodeURIComponent(voiceId)}`;
+}
+
+export async function getProjectVoices(projectId: string): Promise<VoiceAssignment[]> {
+  const res = await apiFetch(`/api/projects/${projectId}/voices`);
+  if (!res.ok) throw new Error("Failed to load project voices");
+  return res.json();
+}
+
+export async function setProjectVoices(
+  projectId: string,
+  assignments: VoiceAssignment[]
+): Promise<VoiceAssignment[]> {
+  const res = await apiFetch(`/api/projects/${projectId}/voices`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(assignments),
+  });
+  if (!res.ok) throw new Error("Failed to save voice assignment");
+  return res.json();
+}
+
+export async function startDub(projectId: string) {
+  const res = await apiFetch(`/api/projects/${projectId}/dub`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to start dubbing");
   return res.json();
 }

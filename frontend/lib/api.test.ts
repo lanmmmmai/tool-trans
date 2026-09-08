@@ -47,4 +47,16 @@ describe("apiFetch", () => {
       })
     );
   });
+
+  it("setProjectVoices PUTs the assignment list", async () => {
+    const { setProjectVoices } = await import("./api");
+    const assignments = [
+      { speaker_label: "speaker_1", engine: "edge_tts", voice_id: "vi-VN-HoaiMyNeural", speed: 1, pitch: 0 },
+    ];
+    await setProjectVoices("proj-1", assignments);
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/projects/proj-1/voices",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify(assignments) })
+    );
+  });
 });
